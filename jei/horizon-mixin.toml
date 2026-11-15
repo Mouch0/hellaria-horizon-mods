@@ -1,6 +1,6 @@
 [mod]
 id = "jei"
-version = "0.3.0"
+version = "0.3.1"
 priority = 100
 
 # The commit this bundle was tested on (Nightly 2026-11-13, 9f42064). It hooks only the
@@ -253,7 +253,7 @@ bindings = [
 ]
 
 # The recipe screen: its pages turn with the wheel, Escape and Backspace go
-# back, the viewer's keys act on its stacks, and it closes with its screen.
+# back (Escape closes it), the viewer's keys act on its stacks, and it closes with its screen.
 
 [[injection]]
 id = "mouse_scroll"

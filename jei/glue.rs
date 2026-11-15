@@ -1715,8 +1715,8 @@ pub(super) fn screen_mouse_scrolled(
     });
 }
 
-/// Keys on the recipe screen: Escape and Backspace go back a page (closing
-/// it at the first), and the viewer's keys (recipes, uses, bookmark) act on
+/// Keys on the recipe screen: Escape closes it, Backspace goes back a page
+/// (closing it at the first), and the viewer's keys (recipes, uses, bookmark) act on
 /// the stack under the pointer.
 pub(super) fn screen_key_pressed(
     game: &Game<'_>,
@@ -1740,7 +1740,14 @@ pub(super) fn screen_key_pressed(
     let Some(hit) = hit else {
         return;
     };
-    if key == "key.keyboard.escape" || (key == "key.keyboard.backspace" && hit.is_some()) {
+    // Escape closes the whole recipe screen at once (and forgets the history);
+    // Backspace over it goes back one page.
+    if key == "key.keyboard.escape" {
+        *canceled = true;
+        pending(Event::Close);
+        return;
+    }
+    if key == "key.keyboard.backspace" && hit.is_some() {
         *canceled = true;
         pending(Event::Back);
         return;

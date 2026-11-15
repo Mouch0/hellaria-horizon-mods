@@ -111,6 +111,14 @@ impl Lang {
         }
     }
 
+    /// Concrete has no recipe: it is its powder put in water.
+    fn concrete_hint(self) -> &'static str {
+        match self {
+            Lang::En => "Concrete: craft the powder, then put it in water",
+            Lang::Es => "Hormigón: craftea el polvo y ponlo en agua",
+        }
+    }
+
     fn no_recipes(self) -> &'static str {
         match self {
             Lang::En => "No recipes for",
@@ -1233,7 +1241,8 @@ fn bump(
     if whole {
         raise(counts, (item, components.to_owned()), made);
     }
-    let keyed = !key.is_empty();
+    // A modded item on a carrier counts for itself only, not for the carrier.
+    let keyed = !key.is_empty() && !is_modded_key(&key);
     raise(counts, (item, key), made);
     if keyed {
         raise(counts, (item, String::new()), made);
@@ -1580,7 +1589,18 @@ fn same(stack: &Stack, want: &Stack) -> bool {
 /// has none).
 fn subtype_matches(have: &str, want: &str) -> bool {
     let want = subtype_key(want);
-    want.is_empty() || subtype_key(have) == want
+    let have = subtype_key(have);
+    if want.is_empty() {
+        // Hellaria fork: a plain vanilla item never stands for a modded item
+        // shown on it as a carrier (chainmail with a mod armor's model).
+        return !is_modded_key(&have);
+    }
+    have == want
+}
+
+/// Whether a subtype key holds an `item_model`: a modded item on a vanilla carrier.
+fn is_modded_key(key: &str) -> bool {
+    key.contains("item_model")
 }
 
 impl Viewer {
@@ -1839,7 +1859,25 @@ impl Viewer {
     fn open(&mut self, item: &Stack, uses: bool, grid: u32) -> Vec<Out> {
         // A worn tool or a renamed stack looks up as the item it is.
         let item = ingredient_of(item);
-        let page = Page { item, uses, tab: 0 };
+        let mut page = Page { item, uses, tab: 0 };
+        // Hellaria fork: concrete has no recipe of its own (its powder hardens
+        // in water): its recipes are its powder's.
+        let mut hint = None;
+        if !uses
+            && page.item.item.ends_with("_concrete")
+            && page.item.components.is_empty()
+            && self.found(&page).is_empty()
+        {
+            let powder = Page {
+                item: Stack::item(&format!("{}_powder", page.item.item)),
+                uses: false,
+                tab: 0,
+            };
+            if !self.found(&powder).is_empty() {
+                page = powder;
+                hint = Some(Out::Say(self.lang.concrete_hint().to_owned()));
+            }
+        }
         if self.found(&page).is_empty() {
             let name = self.stack_name(&page.item.item, &page.item.components);
             return vec![Out::Say(format!(
@@ -1852,7 +1890,9 @@ impl Viewer {
             ))];
         }
         self.history.push(page);
-        vec![self.show(grid)]
+        let mut out = vec![self.show(grid)];
+        out.extend(hint);
+        out
     }
 
     /// The page on top of the history, or the items when there is none.
@@ -2019,7 +2059,7 @@ impl Viewer {
 
     /// A recipe as the panel draws it.
     fn view(&self, recipe: &Recipe, grid: u32) -> View {
-        let slots = (recipe.slots.iter())
+        let mut slots: Vec<Vec<Stack>> = (recipe.slots.iter())
             .map(|slot| {
                 slot.iter()
                     .take(STACKS_MAX)
@@ -2032,18 +2072,20 @@ impl Viewer {
             .map(|s| self.convert(s))
             .collect();
         let (layout, width, height, note) = match recipe.kind {
-            Kind::CraftingShaped => (Layout::Grid, recipe.width, recipe.height, String::new()),
+            // Crafting recipes always show in a real crafting grid: the
+            // inventory's 2x2 when they fit in it, the table's 3x3 otherwise.
+            Kind::CraftingShaped => {
+                let size = craft_grid_size(recipe);
+                slots = place_shaped(slots, recipe.width.max(1) as usize, size);
+                (Layout::Grid, size as u32, size as u32, String::new())
+            }
             Kind::CraftingShapeless => {
-                let n = recipe.slots.len() as u32;
-                let width = match n {
-                    0 | 1 => 1,
-                    2..=4 => 2,
-                    _ => 3,
-                };
+                let size = craft_grid_size(recipe);
+                slots.resize(size * size, Vec::new());
                 (
                     Layout::Grid,
-                    width,
-                    n.div_ceil(width).max(1),
+                    size as u32,
+                    size as u32,
                     self.lang.shapeless().into(),
                 )
             }
@@ -2127,6 +2169,29 @@ impl Viewer {
             },
         }
     }
+}
+
+/// The crafting grid a recipe shows in: 2 (the inventory's) when it fits
+/// in 2x2, else 3 (the crafting table's).
+fn craft_grid_size(recipe: &Recipe) -> usize {
+    let small = match recipe.kind {
+        Kind::CraftingShaped => recipe.width.max(1) <= 2 && recipe.height.max(1) <= 2,
+        _ => recipe.slots.len() <= 4,
+    };
+    if small { 2 } else { 3 }
+}
+
+/// A shaped recipe's slots, `w` per row, placed at the top left of a
+/// `size` x `size` grid, the other cells empty.
+fn place_shaped(slots: Vec<Vec<Stack>>, w: usize, size: usize) -> Vec<Vec<Stack>> {
+    let mut grid = vec![Vec::new(); size * size];
+    for (i, slot) in slots.into_iter().enumerate() {
+        let (c, r) = (i % w, i / w);
+        if c < size && r < size {
+            grid[r * size + c] = slot;
+        }
+    }
+    grid
 }
 
 /// Whether a crafting recipe fits a grid `grid` cells a side (JEI's "+" is
@@ -2940,6 +3005,97 @@ mod tests {
         assert_eq!(*tab, 1);
         assert_eq!(views[0].layout, super::Layout::Cooking);
         assert_eq!(views[0].note, "10 s, 1 XP");
+    }
+
+    #[test]
+    fn a_vanilla_item_never_finds_its_carriers_recipes() {
+        let items = vec![
+            item("minecraft:stick", "Stick"),
+            item("minecraft:diamond_pickaxe", "Diamond Pickaxe"),
+            item("minecraft:diamond", "Diamond"),
+        ];
+        let modded = super::Ingredient {
+            item: 1,
+            count: 1,
+            components: "[minecraft:item_model=\"moretools:diamond_hammer\"]".into(),
+        };
+        let shaped = |result: super::Ingredient| super::Recipe {
+            kind: super::Kind::CraftingShaped,
+            width: 1,
+            height: 2,
+            slots: vec![vec![ingredient(2)], vec![ingredient(0)]],
+            results: vec![result],
+            cooking_time: 0,
+            experience: 0.0,
+            book_id: -1,
+        };
+        let recipes = vec![shaped(ingredient(1)), shaped(modded)];
+        let (mut viewer, _) = viewer(items, recipes, super::Lang::En);
+        let out = viewer.handle(
+            super::Event::Open { stack: stack("minecraft:diamond_pickaxe"), uses: false },
+            &context(3),
+        );
+        let super::Out::Recipes { views, .. } = &out[0] else {
+            panic!("not a page: {out:?}");
+        };
+        assert_eq!(views.len(), 1, "the hammer on its pickaxe carrier is not a pickaxe recipe");
+        assert_eq!(viewer.counts("minecraft:diamond_pickaxe", "").recipes, 1);
+    }
+
+    #[test]
+    fn concrete_shows_its_powders_recipe() {
+        let items = vec![
+            item("minecraft:sand", "Sand"),
+            item("minecraft:magenta_concrete_powder", "Magenta Concrete Powder"),
+            item("minecraft:magenta_concrete", "Magenta Concrete"),
+        ];
+        let recipes = vec![super::Recipe {
+            kind: super::Kind::CraftingShapeless,
+            width: 0,
+            height: 0,
+            slots: vec![vec![ingredient(0)]; 9],
+            results: vec![ingredient(1)],
+            cooking_time: 0,
+            experience: 0.0,
+            book_id: -1,
+        }];
+        let (mut viewer, _) = viewer(items, recipes, super::Lang::En);
+        let out = viewer.handle(
+            super::Event::Open { stack: stack("minecraft:magenta_concrete"), uses: false },
+            &context(3),
+        );
+        assert!(matches!(&out[0], super::Out::Recipes { views, .. } if views.len() == 1), "{out:?}");
+        assert!(matches!(&out[1], super::Out::Say(_)), "{out:?}");
+    }
+
+    #[test]
+    fn crafting_shows_in_a_real_grid() {
+        let st = |id: &str| vec![super::Stack::item(id)];
+        let recipe = |kind, width, height, n: usize| super::Recipe {
+            kind,
+            width,
+            height,
+            slots: vec![Vec::new(); n],
+            results: Vec::new(),
+            cooking_time: 0,
+            experience: 0.0,
+            book_id: -1,
+        };
+        // A 1x2 shaped recipe (a stick) fits the inventory's 2x2.
+        assert_eq!(super::craft_grid_size(&recipe(super::Kind::CraftingShaped, 1, 2, 2)), 2);
+        // A 3x1 shaped recipe needs the table.
+        assert_eq!(super::craft_grid_size(&recipe(super::Kind::CraftingShaped, 3, 1, 3)), 3);
+        // Shapeless: 4 ingredients fit 2x2, 9 (concrete powder) need 3x3.
+        assert_eq!(super::craft_grid_size(&recipe(super::Kind::CraftingShapeless, 0, 0, 4)), 2);
+        assert_eq!(super::craft_grid_size(&recipe(super::Kind::CraftingShapeless, 0, 0, 9)), 3);
+        // A 2x2 shape (a, b / c, d) in a 3x3 grid keeps its rows.
+        let grid = super::place_shaped(vec![st("a"), st("b"), st("c"), st("d")], 2, 3);
+        assert_eq!(grid.len(), 9);
+        assert_eq!(grid[0], st("a"));
+        assert_eq!(grid[1], st("b"));
+        assert!(grid[2].is_empty());
+        assert_eq!(grid[3], st("c"));
+        assert_eq!(grid[4], st("d"));
     }
 
     #[test]

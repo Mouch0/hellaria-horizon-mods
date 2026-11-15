@@ -1,6 +1,6 @@
 # Hellaria — mods natifs pour Horizon
 
-Deux mods natifs pour le lanceur Horizon, à utiliser avec le serveur Minecraft Hellaria
+Trois mods natifs pour le lanceur Horizon, à utiliser avec le serveur Minecraft Hellaria
 (Fabric 1.21.11 + hellaria-bridge). Ils ne servent qu'aux joueurs **Horizon** : les joueurs
 Java gardent leurs mods habituels.
 
@@ -8,6 +8,7 @@ Java gardent leurs mods habituels.
 |---|---|---|
 | `jei/` | JEI for Horizon (version Hellaria) | Liste des objets et recettes, y compris ceux des mods du serveur |
 | `hellaria-builder/` | Hellaria Builder Wand | Aperçu des blocs posés, écran de mélange du sac, orientation horizontale / verticale |
+| `hellaria-waystones/` | Hellaria Waystones | Écran de choix d'une waystone : recherche, coût, pages |
 
 ## Installer depuis le lanceur
 
@@ -24,10 +25,10 @@ En ligne de commande :
 
 ## Compatibilité
 
-Les deux mods sont épinglés sur Horizon Nightly 2026-11-13 (commit `9f42064`). Une autre version
+Les trois mods sont épinglés sur Horizon Nightly 2026-11-13 (commit `9f42064`). Une autre version
 de Horizon peut demander « Compiler quand même » et risque d'échouer.
 
-Le serveur doit avoir `hellaria-bridge` 2.2.0 ou plus ; pour le JEI, le fichier
+Le serveur doit avoir `hellaria-bridge` 2.2.0 ou plus (2.3.0 pour les waystones) ; pour le JEI, le fichier
 `config/hellaria-bridge/envoyer-recettes-jei` doit être présent.
 
 Ce sont des mods natifs : ils s'exécutent avec les droits de l'ordinateur. Lire le code avant de les installer.

@@ -1,0 +1,110 @@
+# Hellaria Waystones pour Horizon : l'écran de choix d'une waystone (recherche, coût, pages),
+# avec le serveur Hellaria (hellaria-bridge 2.3+).
+[mod]
+id = "hellaria_waystones"
+version = "1.0.0"
+priority = 50
+
+# Écrit pour Horizon Nightly 2026-11-13 (9f42064), la version du lanceur de Hellaria.
+[compatibility]
+horizon_revision = "9f42064c11efe7ef3e5ed2baad7ddc2a3b36eea0"
+
+# waystones.rs devient le module crate::game::hellaria_waystones.
+[[module]]
+id = "waystones"
+file = "crates/horizon-client/src/game.rs"
+name = "hellaria_waystones"
+source = "waystones.rs"
+
+[[injection]]
+id = "tick"
+kind = "HEAD"
+target = "horizon_client::game::native_hooks::Game<'_>::native_client_tick_post"
+helper = "tick.rs"
+bindings = [
+  { name = "game", ty = "&mut crate::game::Game<'_>", value = "&mut *self" },
+]
+
+[[injection]]
+id = "packet"
+kind = "HEAD"
+hook = "client_packet"
+hook_version = 1
+helper = "packet.rs"
+bindings = [
+  { name = "packet", ty = "&horizon_protocol::packets::play::Clientbound", value = "packet" },
+]
+
+[[injection]]
+id = "screen_post"
+kind = "HEAD"
+hook = "screen_render_post"
+hook_version = 1
+helper = "screen_post.rs"
+bindings = [
+  { name = "game", ty = "&crate::game::Game<'_>", value = "&*self" },
+  { name = "batch", ty = "&mut horizon_client::hud::HudBatch", value = "&mut *batch" },
+  { name = "screen", ty = "&crate::game::native_hooks::NativeScreenView<'_>", value = "screen" },
+]
+
+[[injection]]
+id = "mouse_press"
+kind = "HEAD"
+hook = "screen_mouse_button_pressed_pre"
+hook_version = 1
+helper = "mouse_press.rs"
+bindings = [
+  { name = "game", ty = "&crate::game::Game<'_>", value = "&*self" },
+  { name = "screen", ty = "&crate::game::native_hooks::NativeScreenView<'_>", value = "screen" },
+  { name = "button", ty = "i32", value = "button" },
+  { name = "canceled", ty = "&mut bool", value = "&mut *canceled" },
+]
+
+[[injection]]
+id = "mouse_release"
+kind = "HEAD"
+hook = "screen_mouse_button_released_pre"
+hook_version = 1
+helper = "mouse_release.rs"
+bindings = [
+  { name = "game", ty = "&crate::game::Game<'_>", value = "&*self" },
+  { name = "canceled", ty = "&mut bool", value = "&mut *canceled" },
+]
+
+[[injection]]
+id = "mouse_scroll"
+kind = "HEAD"
+hook = "screen_mouse_scrolled_pre"
+hook_version = 1
+helper = "mouse_scroll.rs"
+bindings = [
+  { name = "game", ty = "&crate::game::Game<'_>", value = "&*self" },
+  { name = "screen", ty = "&crate::game::native_hooks::NativeScreenView<'_>", value = "screen" },
+  { name = "scroll", ty = "[f64; 2]", value = "scroll" },
+  { name = "canceled", ty = "&mut bool", value = "&mut *canceled" },
+]
+
+[[injection]]
+id = "key_press"
+kind = "HEAD"
+hook = "screen_key_pressed_pre"
+hook_version = 1
+helper = "key_press.rs"
+bindings = [
+  { name = "game", ty = "&crate::game::Game<'_>", value = "&*self" },
+  { name = "screen", ty = "&crate::game::native_hooks::NativeScreenView<'_>", value = "screen" },
+  { name = "key", ty = "&str", value = "key" },
+  { name = "canceled", ty = "&mut bool", value = "&mut *canceled" },
+]
+
+[[injection]]
+id = "char_typed"
+kind = "HEAD"
+hook = "screen_char_typed_pre"
+hook_version = 1
+helper = "char_typed.rs"
+bindings = [
+  { name = "game", ty = "&crate::game::Game<'_>", value = "&*self" },
+  { name = "c", ty = "char", value = "c" },
+  { name = "canceled", ty = "&mut bool", value = "&mut *canceled" },
+]
