@@ -9,6 +9,9 @@ ouvre un écran comme celui du mod Java.
   ou la dimension.
 - **Pages** : boutons Précédent / Suivant, molette, ou Page précédente / Page suivante.
 - Clic sur une destination : téléportation. Échap ferme l'écran.
+- **Maj + clic droit** sur une waystone, ou à sa pose : écran « Modifier la waystone » (nom, et
+  visibilité : joueurs qui l'ont activée / tout le monde, selon ce que le serveur permet).
+  Entrée ou Valider enregistre.
 
 Il faut le serveur Hellaria avec `hellaria-bridge` 2.3.0 ou plus. Sans ce mod, les joueurs Horizon
 gardent le menu coffre du serveur.

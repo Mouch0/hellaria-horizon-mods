@@ -1205,11 +1205,15 @@ pub fn bookmark_tooltip(name: &str, lang: Lang) -> Vec<(String, [u8; 4])> {
 
 /// Every recipe's results and inputs, counted once per recipe for each stack
 /// they name: the item with its components, and the item alone.
-fn count_recipes(recipes: &[Recipe]) -> std::collections::HashMap<(u32, String), Counts> {
+fn count_recipes(
+    recipes: &[Recipe],
+    items: &[Item],
+) -> std::collections::HashMap<(u32, String), Counts> {
     let mut counts: std::collections::HashMap<(u32, String), Counts> =
         std::collections::HashMap::new();
     for recipe in recipes {
         let mut made: Vec<(u32, &str)> = (recipe.results.iter())
+            .filter(|_| !is_trim(recipe, items))
             .map(|s| (s.item, s.components.as_str()))
             .collect();
         made.sort_unstable();
@@ -1622,7 +1626,7 @@ impl Viewer {
         let ids = (items.iter().enumerate())
             .map(|(index, item)| (item.id.clone(), index as u32))
             .collect();
-        let counts = count_recipes(&recipes);
+        let counts = count_recipes(&recipes, &items);
         let mut variants_by_item: std::collections::HashMap<u32, Vec<Variant>> =
             std::collections::HashMap::new();
         for variant in variants {
@@ -1833,7 +1837,7 @@ impl Viewer {
                     r.slots.iter().flatten().any(|s| self.matches(s, want))
                         || self.catalysts(r.kind.station()).contains(&want.item)
                 } else {
-                    r.results.iter().any(|s| self.matches(s, want))
+                    !is_trim(r, &self.items) && r.results.iter().any(|s| self.matches(s, want))
                 }
             })
             .map(Found::Recipe)
@@ -1923,7 +1927,11 @@ impl Viewer {
         let views: Vec<View> = (on_tab.iter())
             .take(RECIPES_MAX)
             .map(|f| match f {
-                Found::Recipe(r) => self.view(r, grid),
+                Found::Recipe(r) => {
+                    let mut view = self.view(r, grid);
+                    focus(&mut view, &page.item, page.uses);
+                    view
+                }
                 Found::Chance(_, r) => self.chance_view(r),
             })
             .collect();
@@ -2034,7 +2042,7 @@ impl Viewer {
     // exists only the tests call this.
     #[allow(dead_code)]
     pub fn set_categories(&mut self, categories: Vec<Category>) {
-        self.counts = count_recipes(&self.recipes);
+        self.counts = count_recipes(&self.recipes, &self.items);
         for category in &categories {
             for recipe in &category.recipes {
                 let mut seen = std::collections::HashSet::new();
@@ -2168,6 +2176,38 @@ impl Viewer {
                 _ => Vec::new(),
             },
         }
+    }
+}
+
+/// Hellaria fork: an armor trim (`smithing_trim`): the smithing table gives back the armor it
+/// was given, decorated. It makes nothing, so it is no recipe "for" the armor (chainmail has
+/// none); it stays a use of the armor, of the template and of the material. Told by its
+/// template slot: every alternative is an armor trim template.
+fn is_trim(recipe: &Recipe, items: &[Item]) -> bool {
+    recipe.kind == Kind::Smithing
+        && recipe.slots.first().is_some_and(|templates| {
+            !templates.is_empty()
+                && templates.iter().all(|t| {
+                    (items.get(t.item as usize))
+                        .is_some_and(|i| i.id.ends_with("_armor_trim_smithing_template"))
+                })
+        })
+}
+
+/// Hellaria fork: the looked-up item shows as itself. A slot of alternatives that holds it
+/// shows only it (instead of cycling through every armor), and so do the results.
+fn focus(view: &mut View, want: &Stack, uses: bool) {
+    let mut narrowed = false;
+    if uses {
+        for slot in &mut view.slots {
+            if slot.len() > 1 && slot.iter().any(|s| same(s, want)) {
+                slot.retain(|s| same(s, want));
+                narrowed = true;
+            }
+        }
+    }
+    if (narrowed || !uses) && view.results.len() > 1 && view.results.iter().any(|s| same(s, want)) {
+        view.results.retain(|s| same(s, want));
     }
 }
 
@@ -3066,6 +3106,49 @@ mod tests {
         );
         assert!(matches!(&out[0], super::Out::Recipes { views, .. } if views.len() == 1), "{out:?}");
         assert!(matches!(&out[1], super::Out::Say(_)), "{out:?}");
+    }
+
+    #[test]
+    fn a_trim_is_a_use_of_the_armor_not_a_recipe() {
+        let items = vec![
+            item("minecraft:coast_armor_trim_smithing_template", "Coast Armor Trim"),
+            item("minecraft:chainmail_helmet", "Chainmail Helmet"),
+            item("minecraft:golden_boots", "Golden Boots"),
+            item("minecraft:gold_ingot", "Gold Ingot"),
+        ];
+        let trim = super::Recipe {
+            kind: super::Kind::Smithing,
+            width: 0,
+            height: 0,
+            slots: vec![
+                vec![ingredient(0)],
+                vec![ingredient(1), ingredient(2)],
+                vec![ingredient(3)],
+            ],
+            results: vec![ingredient(1), ingredient(2)],
+            cooking_time: 0,
+            experience: 0.0,
+            book_id: -1,
+        };
+        assert!(super::is_trim(&trim, &items));
+        let (mut viewer, _) = viewer(items, vec![trim], super::Lang::En);
+        // Chainmail has no recipe: the trim doesn't make it.
+        assert_eq!(viewer.counts("minecraft:chainmail_helmet", "").recipes, 0);
+        let out = viewer.handle(
+            super::Event::Open { stack: stack("minecraft:chainmail_helmet"), uses: false },
+            &context(3),
+        );
+        assert!(matches!(&out[0], super::Out::Say(_)), "{out:?}");
+        // As a use, it shows the helmet itself, in and out, not the other armors.
+        let out = viewer.handle(
+            super::Event::Open { stack: stack("minecraft:chainmail_helmet"), uses: true },
+            &context(3),
+        );
+        let super::Out::Recipes { views, .. } = &out[0] else {
+            panic!("not a page: {out:?}");
+        };
+        assert_eq!(views[0].slots[1], vec![stack("minecraft:chainmail_helmet")]);
+        assert_eq!(views[0].results, vec![stack("minecraft:chainmail_helmet")]);
     }
 
     #[test]

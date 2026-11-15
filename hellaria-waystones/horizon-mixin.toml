@@ -1,8 +1,8 @@
-# Hellaria Waystones pour Horizon : l'écran de choix d'une waystone (recherche, coût, pages),
+# Hellaria Waystones pour Horizon : choix d'une waystone (recherche, coût, pages), nom et visibilité,
 # avec le serveur Hellaria (hellaria-bridge 2.3+).
 [mod]
 id = "hellaria_waystones"
-version = "1.0.0"
+version = "1.1.0"
 priority = 50
 
 # Écrit pour Horizon Nightly 2026-11-13 (9f42064), la version du lanceur de Hellaria.
