@@ -1,0 +1,96 @@
+# Hellaria Builder Wand pour Horizon : aperçu des blocs posés, écran de mélange du sac et
+# orientation horizontale / verticale, avec le serveur Hellaria (hellaria-bridge 2.2+).
+[mod]
+id = "hellaria_builder"
+version = "1.0.0"
+priority = 50
+
+# Testé sur Horizon Nightly 2026-11-13 (9f42064), la version du lanceur de Hellaria.
+[compatibility]
+horizon_revision = "9f42064c11efe7ef3e5ed2baad7ddc2a3b36eea0"
+
+# builder.rs devient le module crate::game::hellaria_builder.
+[[module]]
+id = "builder"
+file = "crates/horizon-client/src/game.rs"
+name = "hellaria_builder"
+source = "builder.rs"
+
+[[injection]]
+id = "tick"
+kind = "HEAD"
+target = "horizon_client::game::native_hooks::Game<'_>::native_client_tick_post"
+helper = "tick.rs"
+bindings = [
+  { name = "game", ty = "&mut crate::game::Game<'_>", value = "&mut *self" },
+]
+
+[[injection]]
+id = "packet"
+kind = "HEAD"
+hook = "client_packet"
+hook_version = 1
+helper = "packet.rs"
+bindings = [
+  { name = "packet", ty = "&horizon_protocol::packets::play::Clientbound", value = "packet" },
+]
+
+[[injection]]
+id = "interact"
+kind = "HEAD"
+hook = "interaction_key"
+hook_version = 1
+helper = "interact.rs"
+bindings = [
+  { name = "game", ty = "&mut crate::game::Game<'_>", value = "&mut *self" },
+  { name = "button", ty = "i32", value = "button" },
+  { name = "swing_hand", ty = "&mut bool", value = "&mut *swing_hand" },
+  { name = "canceled", ty = "&mut bool", value = "&mut *canceled" },
+]
+
+[[injection]]
+id = "preview"
+kind = "HEAD"
+target = "horizon_client::game::native_hooks::Game<'_>::native_world_primitives"
+helper = "preview.rs"
+bindings = [
+  { name = "game", ty = "&crate::game::Game<'_>", value = "&*self" },
+  { name = "primitives", ty = "&mut horizon_client::world_primitives::WorldPrimitives", value = "&mut *primitives" },
+]
+
+[[injection]]
+id = "screen_post"
+kind = "HEAD"
+hook = "screen_render_post"
+hook_version = 1
+helper = "screen_post.rs"
+bindings = [
+  { name = "game", ty = "&crate::game::Game<'_>", value = "&*self" },
+  { name = "batch", ty = "&mut horizon_client::hud::HudBatch", value = "&mut *batch" },
+  { name = "screen", ty = "&crate::game::native_hooks::NativeScreenView<'_>", value = "screen" },
+]
+
+[[injection]]
+id = "mouse_press"
+kind = "HEAD"
+hook = "screen_mouse_button_pressed_pre"
+hook_version = 1
+helper = "mouse_press.rs"
+bindings = [
+  { name = "game", ty = "&crate::game::Game<'_>", value = "&*self" },
+  { name = "screen", ty = "&crate::game::native_hooks::NativeScreenView<'_>", value = "screen" },
+  { name = "button", ty = "i32", value = "button" },
+  { name = "canceled", ty = "&mut bool", value = "&mut *canceled" },
+]
+
+[[injection]]
+id = "mouse_release"
+kind = "HEAD"
+hook = "screen_mouse_button_released_pre"
+hook_version = 1
+helper = "mouse_release.rs"
+bindings = [
+  { name = "game", ty = "&crate::game::Game<'_>", value = "&*self" },
+  { name = "button", ty = "i32", value = "button" },
+  { name = "canceled", ty = "&mut bool", value = "&mut *canceled" },
+]
